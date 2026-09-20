@@ -1,9 +1,17 @@
 """Train and evaluate the review-priority model on real labels.
 
 The label is not synthetic. For each document, extraction is run and compared against
-the CORD ground truth; the label is whether extraction actually got any field wrong.
-The model predicts that from validation findings, which makes this ordinary selective
-prediction rather than a circular exercise in relearning a formula.
+the CORD ground truth, and the label is whether extraction quality fell below a usable
+bar. The model predicts that from validation findings, which makes this ordinary
+selective prediction rather than a circular exercise in relearning a formula.
+
+The bar is document-level F1 below 0.8, not "got everything right". That distinction
+matters and was found by measurement: with a strict all-or-nothing label the rule
+baseline fails on essentially every document, the positive class reaches ~99%, PR-AUC
+climbs to 0.999 while meaning nothing, and no threshold can satisfy any error budget,
+so coverage collapses to zero. A degenerate problem produces impressive-looking numbers
+that do not survive a follow-up question. Asking whether a document is good enough to
+use is both answerable and the question an operator actually has.
 
 Split discipline: the model trains on CORD's train split, the routing threshold is
 chosen on a validation slice of it, and the CORD test split is scored exactly once at
@@ -34,6 +42,9 @@ from src.risk import train_review_model  # noqa: E402
 
 ARTIFACTS = Path(__file__).parent / "artifacts"
 
+# A document is "needs review" when its extraction F1 falls below this.
+QUALITY_BAR = 0.8
+
 
 def words_and_tags(record) -> tuple[list[str], list[str]]:
     ground_truth = json.loads(record["ground_truth"])
@@ -56,7 +67,7 @@ def build_dataset(split: str, limit: int | None = None):
         # and decoding 800 receipt images to throw them away is most of the runtime.
         "image", HFImage(decode=False)
     )
-    features, labels = [], []
+    features, labels, scores = [], [], []
 
     for index, record in enumerate(dataset):
         if limit and index >= limit:
@@ -70,16 +81,28 @@ def build_dataset(split: str, limit: int | None = None):
         findings = run_all_checks(receipt)
         features.append(findings_to_features(receipt, findings))
 
-        # Ground truth for this document: did extraction miss or invent any entity?
-        labels.append(int(extract_entities(gold_tags) != extract_entities(predicted_tags)))
+        # Document-level entity F1 against ground truth.
+        gold = extract_entities(gold_tags)
+        got = extract_entities(predicted_tags)
+        overlap = len(gold & got)
+        precision = overlap / len(got) if got else 0.0
+        recall = overlap / len(gold) if gold else 0.0
+        doc_f1 = 2 * precision * recall / (precision + recall) if (precision + recall) else 0.0
+        labels.append(int(doc_f1 < QUALITY_BAR))
+        scores.append(doc_f1)
 
-    return features, labels
+    return features, labels, scores
 
 
 def main() -> None:
     print("building training set from CORD train split ...")
-    train_features, train_labels = build_dataset("train")
-    print(f"  {len(train_labels)} documents, {sum(train_labels)} with extraction errors")
+    train_features, train_labels, train_scores = build_dataset("train")
+    import statistics
+
+    print(f"  {len(train_labels)} documents")
+    print(f"  below the {QUALITY_BAR} quality bar: {sum(train_labels)} "
+          f"({sum(train_labels) / len(train_labels):.1%})")
+    print(f"  median document F1: {statistics.median(train_scores):.3f}")
 
     if len(set(train_labels)) < 2:
         print("\nEvery document in the training split has the same label.")
@@ -99,7 +122,7 @@ def main() -> None:
     result = train_review_model(train_features, train_labels, target_error_budget=0.05)
 
     print("\nscoring the held-out test split once ...")
-    test_features, test_labels = build_dataset("test")
+    test_features, test_labels, test_scores = build_dataset("test")
 
     import joblib
 
@@ -118,6 +141,8 @@ def main() -> None:
             "test_auto_accept_coverage": float(auto.mean()),
             "test_realised_error_rate": float(y[auto].mean()) if auto.sum() else 0.0,
             "test_base_error_rate": float(y.mean()),
+            "quality_bar": QUALITY_BAR,
+            "median_test_document_f1": float(np.median(test_scores)),
             "note": (
                 "Threshold frozen on validation before the test split was touched. "
                 "The realised error rate is what the budget actually bought, not the "

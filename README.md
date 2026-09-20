@@ -243,6 +243,33 @@ structure of a receipt well and has not seen enough of the long tail - which is 
 not an architecture problem, and would be addressed with more examples of those classes rather
 than a different model.
 
+### Semantic retrieval: a null result
+
+PostgreSQL with pgvector indexes the 100-document corpus, and
+`GET /documents/{id}/similar` returns nearest neighbours by cosine distance, excluding the
+query document itself. Qualitatively it works: the nearest neighbour of `cord-test-0000` is
+`cord-test-0092`, the same vendor and the same `901016 TICKET CP` product code at a different
+quantity.
+
+Quantitatively it does not earn its place, and that is worth stating rather than hiding.
+Near-duplicates were planted by shuffling token blocks and perturbing amounts, then both methods
+were asked to retrieve each query's twin:
+
+| method | Recall@5 |
+|---|---|
+| TF-IDF lexical baseline | 1.000 |
+| BGE-small embeddings | 1.000 |
+
+Both are perfect, so **this experiment provides no evidence that semantic retrieval beats lexical
+matching here.** The benchmark is saturated: 100 documents is a small index, and
+duplicates built by reordering tokens stay lexically close, which is exactly the case TF-IDF is
+good at.
+
+Making this a real test would need a larger index with distractor documents, and duplicates that
+are genuinely paraphrased rather than reordered - different wording for the same transaction,
+which is where lexical overlap breaks down and embeddings should pull ahead. Until that is run,
+the defensible claim is that retrieval is implemented and works, not that it was necessary.
+
 ## Design decisions
 
 

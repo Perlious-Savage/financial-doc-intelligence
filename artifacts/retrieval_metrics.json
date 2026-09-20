@@ -1,0 +1,9 @@
+{
+  "task": "retrieve the planted near-duplicate of each query document",
+  "n_documents": 100,
+  "k": 5,
+  "tfidf_recall_at_k": 1.0,
+  "embedding_recall_at_k": 1.0,
+  "embedding_model": "BAAI/bge-small-en-v1.5",
+  "note": "Near-duplicates are synthetic: token blocks shuffled and some amounts perturbed. Real resubmitted documents may differ in other ways."
+}
