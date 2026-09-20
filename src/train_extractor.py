@@ -27,16 +27,47 @@ def _log_metrics(mlflow, metrics: dict) -> None:
         mlflow.log_metrics(metrics)
 
 
-def main() -> None:
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--epochs", type=float, default=8.0)
-    parser.add_argument("--lr", type=float, default=5e-5)
-    parser.add_argument("--batch-size", type=int, default=4)
-    parser.add_argument("--model", default="microsoft/layoutlmv3-base")
-    parser.add_argument("--output", default="outputs/layoutlmv3-cord")
-    parser.add_argument("--max-train", type=int, default=0, help="0 = use all")
-    args = parser.parse_args()
+class Config:
+    """Plain holder so run_training takes one object whether called by CLI or sweep."""
 
+    def __init__(
+        self,
+        epochs: float = 8.0,
+        lr: float = 5e-5,
+        batch_size: int = 4,
+        model: str = "microsoft/layoutlmv3-base",
+        output: str = "outputs/layoutlmv3-cord",
+        max_train: int = 0,
+        run_name: str | None = None,
+        write_artifacts: bool = True,
+        save_model: bool = True,
+    ):
+        self.epochs = epochs
+        self.lr = lr
+        self.batch_size = batch_size
+        self.model = model
+        self.output = output
+        self.max_train = max_train
+        self.run_name = run_name
+        self.write_artifacts = write_artifacts
+        self.save_model = save_model
+
+    def as_dict(self) -> dict:
+        return {
+            "epochs": self.epochs,
+            "lr": self.lr,
+            "batch_size": self.batch_size,
+            "model": self.model,
+            "max_train": self.max_train,
+        }
+
+
+def run_training(args: "Config") -> dict:
+    """Train one configuration and return its test metrics.
+
+    Returns rather than only printing, so a sweep can collect results without
+    re-reading files or re-launching the interpreter for every run.
+    """
     import numpy as np
     import torch
     from datasets import load_dataset
@@ -153,8 +184,7 @@ def main() -> None:
 
     if mlflow:
         mlflow.set_experiment("layoutlmv3-cord-extraction")
-    run_context = mlflow.start_run() if mlflow else contextlib.nullcontext()
-    with run_context:
+    with (mlflow.start_run(run_name=args.run_name) if mlflow else contextlib.nullcontext()):
         _log_params(mlflow,
             {
                 "model": args.model,
@@ -185,11 +215,14 @@ def main() -> None:
         }
         _log_metrics(mlflow, {k: v for k, v in metrics.items() if isinstance(v, (int, float))})
 
+        if not args.write_artifacts:
+            return metrics
+
         (ARTIFACTS / "metrics.json").write_text(json.dumps(metrics, indent=2))
         (ARTIFACTS / "training_config.json").write_text(
             json.dumps(
                 {
-                    **vars(args),
+                    **args.as_dict(),
                     "labels": labels,
                     "device": "cuda" if torch.cuda.is_available() else "cpu",
                     "gpu": torch.cuda.get_device_name(0) if torch.cuda.is_available() else None,
@@ -205,11 +238,34 @@ def main() -> None:
                 indent=2,
             )
         )
-        trainer.save_model(args.output)
-        processor.save_pretrained(args.output)
+        if args.save_model:
+            trainer.save_model(args.output)
+            processor.save_pretrained(args.output)
 
     print(json.dumps(metrics, indent=2))
     print(f"\nArtifacts written to {ARTIFACTS}")
+    return metrics
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--epochs", type=float, default=8.0)
+    parser.add_argument("--lr", type=float, default=5e-5)
+    parser.add_argument("--batch-size", type=int, default=4)
+    parser.add_argument("--model", default="microsoft/layoutlmv3-base")
+    parser.add_argument("--output", default="outputs/layoutlmv3-cord")
+    parser.add_argument("--max-train", type=int, default=0, help="0 = use all")
+    cli = parser.parse_args()
+    run_training(
+        Config(
+            epochs=cli.epochs,
+            lr=cli.lr,
+            batch_size=cli.batch_size,
+            model=cli.model,
+            output=cli.output,
+            max_train=cli.max_train,
+        )
+    )
 
 
 if __name__ == "__main__":
