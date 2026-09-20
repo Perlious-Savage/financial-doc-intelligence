@@ -22,9 +22,11 @@ from .extract import BACKEND, extract
 from .graph import analyze
 from .schemas import AnalysisResult, ExtractedReceipt
 
-load_dotenv()
+ROOT = Path(__file__).resolve().parent.parent
+# Explicit path: find_dotenv() walks the call stack and fails in some embedding contexts.
+load_dotenv(ROOT / ".env")
 
-ARTIFACTS = Path(__file__).resolve().parent.parent / "artifacts"
+ARTIFACTS = ROOT / "artifacts"
 
 # Documents are untrusted input. Cap the size before anything parses them.
 MAX_UPLOAD_BYTES = 10 * 1024 * 1024
