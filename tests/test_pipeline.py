@@ -96,3 +96,26 @@ def test_entity_metric_requires_exact_span_and_type():
 
     # malformed sequences open a new entity rather than being dropped silently
     assert ("merchant", 0, 2) in extract_entities(["I-merchant", "I-merchant"])
+
+
+def test_baseline_spans_cover_label_and_value():
+    """CORD annotates the printed label and its value as one entity."""
+    from src.baseline import predict_tags
+
+    tags = predict_tags(["TOTAL", "60.000"])
+    assert tags == ["B-total.total_price", "I-total.total_price"]
+
+
+def test_baseline_does_not_swallow_the_following_line():
+    from src.baseline import predict_tags
+
+    tags = predict_tags(["TAX", "5.455", "Subtotal", "60.000"])
+    assert tags[1] == "I-sub_total.tax_price"
+    assert tags[2] == "B-sub_total.subtotal_price"
+
+
+def test_baseline_prefers_the_longer_trigger_phrase():
+    """'TOTAL DISC' is a discount line, not the grand total."""
+    from src.baseline import predict_tags
+
+    assert predict_tags(["TOTAL", "DISC", "-60.000"])[0] == "B-sub_total.discount_price"
