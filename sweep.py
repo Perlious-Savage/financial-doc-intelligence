@@ -54,13 +54,23 @@ def sensitivity(results: list[dict], key: str) -> dict:
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--quick", action="store_true", help="tiny grid, for checking the plumbing")
+    parser.add_argument(
+        "--fast",
+        action="store_true",
+        help="learning rate only, 4 epochs each (~25 min instead of ~70)",
+    )
     args = parser.parse_args()
 
     from src.train_extractor import Config, run_training
 
-    grid = (
-        {"lr": [3e-5, 5e-5], "epochs": [1.0], "batch_size": [4]} if args.quick else DEFAULT_GRID
-    )
+    if args.quick:
+        grid = {"lr": [3e-5, 5e-5], "epochs": [1.0], "batch_size": [4]}
+    elif args.fast:
+        # Learning rate carries most of the signal; dropping the epoch arm roughly
+        # thirds the runtime at the cost of not testing the plateau claim.
+        grid = {"lr": [1e-5, 3e-5, 5e-5, 1e-4], "epochs": [4.0], "batch_size": [4]}
+    else:
+        grid = DEFAULT_GRID
     combinations = [
         dict(zip(grid.keys(), values)) for values in itertools.product(*grid.values())
     ]
