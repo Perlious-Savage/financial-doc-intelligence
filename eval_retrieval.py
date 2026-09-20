@@ -26,7 +26,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 import numpy as np  # noqa: E402
-from datasets import load_dataset  # noqa: E402
+from datasets import Image as HFImage, load_dataset  # noqa: E402
 from sklearn.feature_extraction.text import TfidfVectorizer  # noqa: E402
 
 from src.index import embed_texts  # noqa: E402
@@ -59,7 +59,9 @@ def recall_at_k(similarity: np.ndarray, k: int) -> float:
 
 def main() -> None:
     rng = random.Random(0)
-    dataset = load_dataset("naver-clova-ix/cord-v2", split="test", streaming=True)
+    dataset = load_dataset("naver-clova-ix/cord-v2", split="test", streaming=True).cast_column(
+        "image", HFImage(decode=False)
+    )
 
     corpus = []
     for record in dataset:

@@ -16,7 +16,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-from datasets import load_dataset  # noqa: E402
+from datasets import Image as HFImage, load_dataset  # noqa: E402
 
 from src.index import count_documents, embed_texts, init_schema, upsert_documents  # noqa: E402
 
@@ -35,7 +35,9 @@ def main() -> None:
     init_schema()
 
     print("streaming CORD-v2 test split ...")
-    dataset = load_dataset("naver-clova-ix/cord-v2", split="test", streaming=True)
+    dataset = load_dataset("naver-clova-ix/cord-v2", split="test", streaming=True).cast_column(
+        "image", HFImage(decode=False)
+    )
 
     doc_ids, texts = [], []
     for index, record in enumerate(dataset):

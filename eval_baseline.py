@@ -12,7 +12,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 
-from datasets import load_dataset
+from datasets import Image as HFImage, load_dataset
 
 from src.baseline import predict_tags
 from src.metrics import classification_report, precision_recall_f1
@@ -22,7 +22,9 @@ ARTIFACTS = Path(__file__).parent / "artifacts"
 
 def main() -> None:
     print("streaming CORD-v2 test split ...")
-    dataset = load_dataset("naver-clova-ix/cord-v2", split="test", streaming=True)
+    dataset = load_dataset("naver-clova-ix/cord-v2", split="test", streaming=True).cast_column(
+        "image", HFImage(decode=False)
+    )
 
     references: list[list[str]] = []
     predictions: list[list[str]] = []

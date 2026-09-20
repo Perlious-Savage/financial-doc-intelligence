@@ -24,7 +24,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 import numpy as np  # noqa: E402
-from datasets import load_dataset  # noqa: E402
+from datasets import Image as HFImage, load_dataset  # noqa: E402
 
 from src.baseline import predict_tags  # noqa: E402
 from src.checks import FEATURE_ORDER, findings_to_features, run_all_checks  # noqa: E402
@@ -51,7 +51,11 @@ def words_and_tags(record) -> tuple[list[str], list[str]]:
 
 def build_dataset(split: str, limit: int | None = None):
     """Return (features, labels). Label 1 means extraction got something wrong."""
-    dataset = load_dataset("naver-clova-ix/cord-v2", split=split, streaming=True)
+    dataset = load_dataset("naver-clova-ix/cord-v2", split=split, streaming=True).cast_column(
+        # Skip image decoding entirely: only the annotation text is read here,
+        # and decoding 800 receipt images to throw them away is most of the runtime.
+        "image", HFImage(decode=False)
+    )
     features, labels = [], []
 
     for index, record in enumerate(dataset):
