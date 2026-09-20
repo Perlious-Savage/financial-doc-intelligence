@@ -1,4 +1,4 @@
-# Financial Document Intelligence & Review Automation
+# AI-Powered Financial Document Intelligence
 
 Structured field extraction from financial documents, with deterministic validation and
 confidence-based routing to human review.
