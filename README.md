@@ -8,7 +8,10 @@ confidence-based routing to human review.
 
 
 
-Status: in progress. Metrics land in `artifacts/metrics.json` as experiments complete.
+**Fine-tuned model:** [perlious-Savage/layoutlmv3-cord-extraction](https://huggingface.co/perlious-Savage/layoutlmv3-cord-extraction)
+
+Measured results below. Every number is reproducible from this repository; artifacts are in
+`artifacts/`.
 
 
 
@@ -197,6 +200,8 @@ move the third decimal place. The published `nielsr/layoutlmv3-finetuned-cord` r
 on this dataset under a different evaluation setup - context, not a like-for-like comparison.
 
 
+
+Model weights: [https://huggingface.co/perlious-Savage/layoutlmv3-cord-extraction](https://huggingface.co/perlious-Savage/layoutlmv3-cord-extraction)
 
 Artifacts: `artifacts/metrics.json`, `artifacts/training_config.json`,
 
