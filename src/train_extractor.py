@@ -110,17 +110,23 @@ def main() -> None:
             "f1": f1_score(refs, preds),
         }
 
+    # transformers renamed `evaluation_strategy` to `eval_strategy` in 4.41. Colab's
+    # pinned version moves around, so pick whichever this install accepts.
+    import inspect
+
+    ta_params = inspect.signature(TrainingArguments.__init__).parameters
+    eval_key = "eval_strategy" if "eval_strategy" in ta_params else "evaluation_strategy"
     training_args = TrainingArguments(
         output_dir=args.output,
         num_train_epochs=args.epochs,
         learning_rate=args.lr,
         per_device_train_batch_size=args.batch_size,
         per_device_eval_batch_size=args.batch_size,
-        eval_strategy="epoch",
         save_strategy="no",
         logging_steps=25,
         report_to=[],
         fp16=torch.cuda.is_available(),
+        **{eval_key: "epoch"},
     )
 
     trainer = Trainer(
