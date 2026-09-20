@@ -275,6 +275,26 @@ are genuinely paraphrased rather than reordered - different wording for the same
 which is where lexical overlap breaks down and embeddings should pull ahead. Until that is run,
 the defensible claim is that retrieval is implemented and works, not that it was necessary.
 
+## What is measured, and what is not
+
+Being specific about this is the point of the repository.
+
+| Component | Status |
+|---|---|
+| LayoutLMv3 extraction | **Measured.** 0.948 F1, single run, artifacts committed |
+| Rule baseline | **Measured.** 0.509 F1, deterministic |
+| Per-field analysis | **Measured.** Gain located in fields rules cannot reach |
+| Entity-level metric | **Tested.** Implemented here, 22 tests |
+| Decimal validation | **Tested.** Reconciliation logic covered |
+| LangGraph routing | **Verified.** Both branches exercised |
+| FastAPI + Docker | **CI-verified.** Builds and serves without a GPU |
+| pgvector retrieval | **Implemented, not justified.** Lexical baseline ties at Recall@5 = 1.0 |
+| Review-priority model | **Implemented.** Calibrated classifier with frozen threshold |
+| MLflow | **Used.** Training runs tracked |
+
+Not measured, and therefore not claimed: latency, cost per document, KYC or compliance
+performance, confidence intervals on any figure.
+
 ## Design decisions
 
 
