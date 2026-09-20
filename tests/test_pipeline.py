@@ -138,3 +138,19 @@ def test_threshold_fails_closed_when_budget_is_unreachable():
     assert result["budget_met"] is False
     assert result["threshold"] == 0.0
     assert result["auto_accept_coverage"] == 0.0
+
+
+def test_scorer_refuses_a_model_that_failed_its_budget(tmp_path, monkeypatch):
+    """A model that could not meet its error budget does not get deployed."""
+    import json
+
+    from src import risk
+
+    monkeypatch.setattr(risk, "MODEL_PATH", tmp_path / "m.joblib")
+    monkeypatch.setattr(risk, "THRESHOLD_PATH", tmp_path / "t.json")
+    (tmp_path / "m.joblib").write_bytes(b"not actually a model")
+    (tmp_path / "t.json").write_text(json.dumps({"threshold": 0.0, "budget_met": False}))
+
+    scorer = risk.ReviewScorer()
+    assert scorer.model is None
+    assert "did not meet its error budget" in scorer.source

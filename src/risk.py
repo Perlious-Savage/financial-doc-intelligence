@@ -55,15 +55,27 @@ class ReviewScorer:
         self._load()
 
     def _load(self) -> None:
-        if not MODEL_PATH.exists():
+        """Load the trained scorer, but only if it earned its place.
+
+        A model that could not satisfy its error budget during training has failed its
+        acceptance criterion, and a failed model does not get deployed. In that case
+        the deterministic triage runs instead: it still routes on hard rules - failed
+        checks, missing fields, low confidence - and it makes no error-budget claim,
+        which is honest about what it can offer.
+        """
+        if not MODEL_PATH.exists() or not THRESHOLD_PATH.exists():
             return
         try:
             import joblib
 
+            selection = json.loads(THRESHOLD_PATH.read_text())
+            if not selection.get("budget_met", False):
+                self.source = "rules (trained model did not meet its error budget)"
+                return
+
             self.model = joblib.load(MODEL_PATH)
+            self.threshold = selection["threshold"]
             self.source = "model"
-            if THRESHOLD_PATH.exists():
-                self.threshold = json.loads(THRESHOLD_PATH.read_text())["threshold"]
         except Exception:
             # A missing or unreadable model must not take the service down.
             self.model = None
