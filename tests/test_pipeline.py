@@ -119,3 +119,22 @@ def test_baseline_prefers_the_longer_trigger_phrase():
     from src.baseline import predict_tags
 
     assert predict_tags(["TOTAL", "DISC", "-60.000"])[0] == "B-sub_total.discount_price"
+
+
+def test_threshold_fails_closed_when_budget_is_unreachable():
+    """If no threshold meets the error budget, auto-accept nothing.
+
+    The earlier default accepted everything, which produced 98% auto-acceptance at an
+    83% error rate. A review system that fails open is worse than no review system.
+    """
+    from src.risk import train_review_model
+
+    # Features carry no signal and almost every document is bad: no threshold can
+    # deliver a 5% error rate.
+    features = [{"mean_confidence": 0.5} for _ in range(100)]
+    labels = [1] * 80 + [0] * 20
+
+    result = train_review_model(features, labels, target_error_budget=0.05)
+    assert result["budget_met"] is False
+    assert result["threshold"] == 0.0
+    assert result["auto_accept_coverage"] == 0.0

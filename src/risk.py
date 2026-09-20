@@ -131,14 +131,30 @@ def train_review_model(
     )
 
     base = GradientBoostingClassifier(random_state=0)
-    model = CalibratedClassifierCV(base, cv=3, method="isotonic")
-    model.fit(X_train, y_train)
+    # Calibration needs at least one example per class per fold. On a small or skewed
+    # training set, asking for 3 folds raises rather than degrading, so fold count is
+    # capped by the rarest class.
+    rarest = int(min(np.bincount(y_train))) if len(set(y_train)) > 1 else 0
+    folds = max(2, min(3, rarest))
+    if rarest < 2:
+        base.fit(X_train, y_train)
+        model = base
+    else:
+        model = CalibratedClassifierCV(base, cv=folds, method="isotonic")
+        model.fit(X_train, y_train)
 
     probabilities = model.predict_proba(X_val)[:, 1]
 
-    # Lowest threshold whose auto-accepted set stays inside the error budget.
-    chosen = 1.0
+    # Highest threshold whose auto-accepted set stays inside the error budget.
+    #
+    # The default is 0.0, meaning accept nothing. This matters: if no threshold can
+    # satisfy the budget, the safe answer is to route every document to a human, not
+    # to wave them all through. An earlier version defaulted to 1.0 and produced 98%
+    # auto-acceptance at an 83% error rate - the exact opposite of what a review
+    # system is for. In a safety path the fallback must fail closed.
+    chosen = 0.0
     coverage = 0.0
+    budget_met = False
     for candidate in np.linspace(0.05, 0.95, 91):
         auto = probabilities < candidate
         if auto.sum() == 0:
@@ -147,6 +163,7 @@ def train_review_model(
         if error_rate <= target_error_budget:
             chosen = float(candidate)
             coverage = float(auto.mean())
+            budget_met = True
 
     ARTIFACTS.mkdir(exist_ok=True)
     joblib.dump(model, MODEL_PATH)
@@ -163,7 +180,12 @@ def train_review_model(
         "n_train": int(len(y_train)),
         "n_val": int(len(y_val)),
         "features": FEATURE_ORDER,
-        "note": "Threshold selected on the validation split and frozen.",
+        "budget_met": budget_met,
+        "base_error_rate": float(y_val.mean()),
+        "note": (
+            "Threshold selected on the validation split and frozen. When no threshold "
+            "satisfies the budget, the model fails closed: nothing is auto-accepted."
+        ),
     }
     THRESHOLD_PATH.write_text(json.dumps(result, indent=2))
     return result
