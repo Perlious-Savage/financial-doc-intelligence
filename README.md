@@ -80,12 +80,26 @@ against.
 
 ### Fine-tuned LayoutLMv3
 
-Pending. Results land in `artifacts/metrics.json` and are written here when the run
-completes.
+Same test split, same entity-level metric, so the comparison is like for like.
 
-Reference point: the published `nielsr/layoutlmv3-finetuned-cord` reports 0.964 F1 on
-this dataset. That is a different evaluation setup, so it is context rather than a
-like-for-like comparison.
+| method | precision | recall | F1 |
+|---|---|---|---|
+| keyword + position rules, no model | 0.557 | 0.468 | **0.509** |
+| LayoutLMv3 fine-tuned | 0.942 | 0.955 | **0.948** |
+| | | | **+0.439** |
+
+8 epochs, lr 5e-05, batch size 4, 800 training
+documents, 59 labels, 711s on an A100.
+Validation F1 by epoch: 0.820, 0.923, 0.921, 0.950, 0.946, 0.952, 0.955, 0.955 — it plateaus
+from epoch 6, so the last two epochs bought nothing.
+
+**Caveats, stated plainly.** This is a single training run: no repeated seeds, no confidence
+intervals. With 100 test documents the interval around 0.948 is not tight, and a rerun would
+move the third decimal place. The published `nielsr/layoutlmv3-finetuned-cord` reports 0.964
+on this dataset under a different evaluation setup — context, not a like-for-like comparison.
+
+Artifacts: `artifacts/metrics.json`, `artifacts/training_config.json`,
+`artifacts/per_field_report.txt`, `artifacts/predictions.json`.
 
 ## Design decisions
 
