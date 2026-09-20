@@ -1,9 +1,7 @@
-# GPU training only (Colab). Installed on top of requirements.txt
--r requirements.txt
-torch
+# GPU training only (Colab). Kept minimal on purpose: Colab already ships torch,
+# and a long dependency list is a long list of things that can break the install.
 transformers>=4.40
 datasets>=2.18
-seqeval
 Pillow
 accelerate
-sentence-transformers
+mlflow

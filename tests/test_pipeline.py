@@ -76,3 +76,23 @@ def test_high_confidence_clean_receipt_is_not_flagged():
     )
     result = analyze(receipt)
     assert not result.decision.review_required
+
+
+def test_entity_metric_requires_exact_span_and_type():
+    from src.metrics import extract_entities, precision_recall_f1
+
+    reference = [["B-merchant", "I-merchant", "O", "B-total"]]
+
+    # exact match
+    assert precision_recall_f1(reference, reference)[2] == 1.0
+
+    # a partially extracted field is not a usable field, and must not score
+    partial = [["B-merchant", "O", "O", "B-total"]]
+    assert precision_recall_f1(reference, partial)[2] == 0.5
+
+    # right span, wrong type
+    wrong_type = [["B-total", "I-total", "O", "B-total"]]
+    assert precision_recall_f1(reference, wrong_type)[2] == 0.5
+
+    # malformed sequences open a new entity rather than being dropped silently
+    assert ("merchant", 0, 2) in extract_entities(["I-merchant", "I-merchant"])

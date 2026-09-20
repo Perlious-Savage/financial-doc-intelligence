@@ -1,0 +1,3 @@
+# Corpus indexing (GPU side): embeddings for pgvector
+sentence-transformers
+psycopg[binary]>=3.1

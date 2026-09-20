@@ -9,11 +9,22 @@ a claim.
 from __future__ import annotations
 
 import argparse
+import contextlib
 import json
 import platform
 from pathlib import Path
 
 ARTIFACTS = Path(__file__).resolve().parent.parent / "artifacts"
+
+
+def _log_params(mlflow, params: dict) -> None:
+    if mlflow:
+        mlflow.log_params(params)
+
+
+def _log_metrics(mlflow, metrics: dict) -> None:
+    if mlflow:
+        mlflow.log_metrics(metrics)
 
 
 def main() -> None:
@@ -26,11 +37,9 @@ def main() -> None:
     parser.add_argument("--max-train", type=int, default=0, help="0 = use all")
     args = parser.parse_args()
 
-    import mlflow
     import numpy as np
     import torch
     from datasets import load_dataset
-    from seqeval.metrics import classification_report, f1_score, precision_score, recall_score
     from transformers import (
         AutoProcessor,
         LayoutLMv3ForTokenClassification,
@@ -39,6 +48,14 @@ def main() -> None:
     )
 
     from .data import DATASET_ID, build_label_list, parse_example
+    from .metrics import classification_report, precision_recall_f1
+
+    # Tracking is useful but must never be the reason a training run dies.
+    try:
+        import mlflow
+    except ImportError:  # pragma: no cover
+        mlflow = None
+        print('mlflow not installed; skipping experiment tracking')
 
     ARTIFACTS.mkdir(exist_ok=True)
 
@@ -104,11 +121,8 @@ def main() -> None:
         logits, references = eval_prediction
         predictions = np.argmax(logits, axis=2)
         preds, refs = decode(predictions, references)
-        return {
-            "precision": precision_score(refs, preds),
-            "recall": recall_score(refs, preds),
-            "f1": f1_score(refs, preds),
-        }
+        precision, recall, f1 = precision_recall_f1(refs, preds)
+        return {"precision": precision, "recall": recall, "f1": f1}
 
     # transformers renamed `evaluation_strategy` to `eval_strategy` in 4.41. Colab's
     # pinned version moves around, so pick whichever this install accepts.
@@ -137,9 +151,11 @@ def main() -> None:
         compute_metrics=compute_metrics,
     )
 
-    mlflow.set_experiment("layoutlmv3-cord-extraction")
-    with mlflow.start_run():
-        mlflow.log_params(
+    if mlflow:
+        mlflow.set_experiment("layoutlmv3-cord-extraction")
+    run_context = mlflow.start_run() if mlflow else contextlib.nullcontext()
+    with run_context:
+        _log_params(mlflow,
             {
                 "model": args.model,
                 "epochs": args.epochs,
@@ -155,20 +171,19 @@ def main() -> None:
         test_output = trainer.predict(test_ds)
         preds, refs = decode(np.argmax(test_output.predictions, axis=2), test_output.label_ids)
 
+        test_precision, test_recall, test_f1 = precision_recall_f1(refs, preds)
         metrics = {
             "dataset": DATASET_ID,
             "model": args.model,
-            "test_precision": float(precision_score(refs, preds)),
-            "test_recall": float(recall_score(refs, preds)),
-            "test_f1": float(f1_score(refs, preds)),
+            "test_precision": test_precision,
+            "test_recall": test_recall,
+            "test_f1": test_f1,
             "n_train": len(train_ds),
             "n_test": len(test_ds),
             "num_labels": len(labels),
             "note": "Single training run. No confidence intervals, no repeated seeds.",
         }
-        mlflow.log_metrics(
-            {k: v for k, v in metrics.items() if isinstance(v, (int, float))}
-        )
+        _log_metrics(mlflow, {k: v for k, v in metrics.items() if isinstance(v, (int, float))})
 
         (ARTIFACTS / "metrics.json").write_text(json.dumps(metrics, indent=2))
         (ARTIFACTS / "training_config.json").write_text(
