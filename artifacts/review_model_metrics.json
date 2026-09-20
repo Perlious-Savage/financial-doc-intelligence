@@ -1,5 +1,5 @@
 {
-  "threshold": 1.0,
+  "threshold": 0.0,
   "target_error_budget": 0.05,
   "auto_accept_coverage": 0.0,
   "val_pr_auc": 0.9547990951316303,
@@ -15,11 +15,13 @@
     "line_item_count",
     "has_total"
   ],
+  "budget_met": false,
+  "base_error_rate": 0.840625,
   "note": "Threshold frozen on validation before the test split was touched. The realised error rate is what the budget actually bought, not the budget itself.",
   "trainable": true,
   "n_test": 100,
-  "test_auto_accept_coverage": 0.98,
-  "test_realised_error_rate": 0.826530612244898,
+  "test_auto_accept_coverage": 0.0,
+  "test_realised_error_rate": 0.0,
   "test_base_error_rate": 0.83,
   "quality_bar": 0.8,
   "median_test_document_f1": 0.5454545454545454

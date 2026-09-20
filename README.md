@@ -1,377 +1,261 @@
 # Financial Document Intelligence & Review Automation
 
-
-
 Structured field extraction from financial documents, with deterministic validation and
-
 confidence-based routing to human review.
 
+**Model:** [perlious-Savage/layoutlmv3-cord-extraction](https://huggingface.co/perlious-Savage/layoutlmv3-cord-extraction)
 
+Every figure below is reproducible from this repository. Raw outputs are in [`artifacts/`](artifacts/).
 
-**Fine-tuned model:** [perlious-Savage/layoutlmv3-cord-extraction](https://huggingface.co/perlious-Savage/layoutlmv3-cord-extraction)
-
-Measured results below. Every number is reproducible from this repository; artifacts are in
-`artifacts/`.
-
-
-
-## Architecture
-
-
-
-```
-
-Input document
-
-      |
-
-      v
-
-Extraction  (LayoutLMv3 fine-tuned on CORD-v2; regex/positional baseline for comparison)
-
-      |
-
-      v
-
-Structured JSON  (Pydantic schema)
-
-      |
-
-      v
-
-Deterministic validation  (Decimal arithmetic: line items -> subtotal, + tax -> total)
-
-      |
-
-      v
-
-Confidence check ----- low ------> human review
-
-      |
-
-     high
-
-      |
-
-      v
-
-Review-priority scoring  (scikit-learn)
-
-      |
-
-      v
-
-FastAPI service ----+---- PostgreSQL + pgvector  (similar-document retrieval)
-
-                    |
-
-                    +---- GPU inference service (separate from the CPU container)
-
-
-
-MLflow tracks training runs.  LangGraph orchestrates the flow above, including the branch.
-
-```
-
-
+---
 
 ## Results
 
-
-
-### Baseline: keyword and position rules, no model
-
-
-
-Deterministic, CPU-only, no training. Scored on the CORD-v2 test split
-
-(100 documents, 0.509 micro F1).
-
-
-
-Scoring is **entity-level**: a field counts as correct only if its type and its full
-
-span match the reference exactly. A partially extracted merchant name scores zero,
-
-because a partially extracted field is not a usable one. Implementation in
-
-`src/metrics.py`.
-
-
-
-The aggregate number matters less than where it comes from. The baseline solves fields
-
-that carry a printed label next to their value, and scores **exactly zero** on every
-
-field that requires understanding position on the page:
-
-
-
-**Fields the rules handle**
-
-
-
-| field | F1 | support |
-
-|---|---|---|
-
-| `total.cashprice` | 0.835 | 69 |
-
-| `sub_total.subtotal_price` | 0.825 | 66 |
-
-| `total.changeprice` | 0.804 | 56 |
-
-| `sub_total.service_price` | 0.800 | 12 |
-
-| `total.total_price` | 0.694 | 96 |
-
-| `sub_total.tax_price` | 0.684 | 45 |
-
-
-
-**Fields the rules cannot touch**
-
-
-
-| field | F1 | support |
-
-|---|---|---|
-
-| `menu.cnt` | 0.000 | 220 |
-
-| `menu.unitprice` | 0.000 | 67 |
-
-| `menu.sub.nm` | 0.000 | 36 |
-
-| `menu.sub.price` | 0.000 | 20 |
-
-| `menu.sub.cnt` | 0.000 | 17 |
-
-| `sub_total.etc` | 0.000 | 13 |
-
-
-
-Quantities sitting in a column, unit prices positioned relative to their line item,
-
-nested sub-items - none of these announce themselves with a keyword. That gap is the
-
-reason to reach for a layout-aware model, and it is what the fine-tune is measured
-
-against.
-
-
-
-### Fine-tuned LayoutLMv3
-
-
-
-Same test split, same entity-level metric, so the comparison is like for like.
-
-
-
-| method | precision | recall | F1 |
-
-|---|---|---|---|
-
-| keyword + position rules, no model | 0.557 | 0.468 | **0.509** |
-
-| LayoutLMv3 fine-tuned | 0.942 | 0.955 | **0.948** |
-
-| | | | **+0.439** |
-
-
-
-8 epochs, lr 5e-05, batch size 4, 800 training
-
-documents, 59 labels, 711s on an A100.
-
-Validation F1 by epoch: 0.820, 0.923, 0.921, 0.950, 0.946, 0.952, 0.955, 0.955 - it plateaus
-
-from epoch 6, so the last two epochs bought nothing.
-
-
-
-**Caveats, stated plainly.** This is a single training run: no repeated seeds, no confidence
-
-intervals. With 100 test documents the interval around 0.948 is not tight, and a rerun would
-
-move the third decimal place. The published `nielsr/layoutlmv3-finetuned-cord` reports 0.964
-
-on this dataset under a different evaluation setup - context, not a like-for-like comparison.
-
-
-
-Model weights: [https://huggingface.co/perlious-Savage/layoutlmv3-cord-extraction](https://huggingface.co/perlious-Savage/layoutlmv3-cord-extraction)
-
-Artifacts: `artifacts/metrics.json`, `artifacts/training_config.json`,
-
-`artifacts/per_field_report.txt`, `artifacts/predictions.json`.
-
-
-
-### Where the gain actually came from
-
-The aggregate jump from 0.509 to 0.948 is not spread evenly, and the per-field breakdown is the
-part worth reading.
-
-**Fields the rule baseline could not touch at all, now solved.** These have no printed label
-beside them - a quantity sits in a column, a unit price is positioned relative to its line item -
-so keyword matching scores exactly zero by construction. This is the gap a layout-aware model
-exists to close, and it closed it:
-
-| field | support | baseline F1 | LayoutLMv3 F1 |
-|---|---|---|---|
+Fine-tuned LayoutLMv3 against a no-model baseline, on the CORD-v2 test split
+(100 documents, 1,309 entities, 59 field types).
+
+| Method | Precision | Recall | F1 |
+|:---|---:|---:|---:|
+| Keyword + position rules | 0.557 | 0.468 | 0.509 |
+| **LayoutLMv3 fine-tuned** | **0.942** | **0.955** | **0.948** |
+
+Scoring is **entity-level**: a field counts only when its type *and* full span match the reference
+exactly. A partially extracted merchant name scores zero, because a partially extracted field is
+not a usable one. Implementation in [`src/metrics.py`](src/metrics.py).
+
+<details>
+<summary><b>Training configuration</b></summary>
+
+| | |
+|:---|:---|
+| Base model | `microsoft/layoutlmv3-base` |
+| Epochs | 8 |
+| Learning rate | 5e-5 |
+| Batch size | 4 |
+| Training documents | 800 |
+| Label classes | 59 |
+| Hardware | A100, 711s |
+
+Validation F1 by epoch: 0.820, 0.923, 0.921, 0.950, 0.946, 0.952, 0.955, 0.955.
+Plateaus from epoch 6, so the final two epochs added nothing.
+
+</details>
+
+### Where the gain came from
+
+The aggregate jump is not spread evenly. The rule baseline handles fields printed beside their own
+label, and scores **exactly zero** on fields identified by position alone: a quantity in a column,
+a unit price placed relative to its line item. Closing that gap is what a layout-aware model is for.
+
+| Field | Support | Rules | LayoutLMv3 |
+|:---|---:|---:|---:|
 | `menu.cnt` | 220 | 0.000 | **0.984** |
 | `menu.unitprice` | 67 | 0.000 | **0.933** |
 | `menu.sub.nm` | 36 | 0.000 | **0.892** |
-| `total.menuqty_cnt` | 29 | 0.067 | **0.967** |
 | `menu.sub.price` | 20 | 0.000 | **0.947** |
 | `menu.sub.cnt` | 17 | 0.000 | **0.944** |
-| `menu.num` | 11 | 0.000 | **0.842** |
-| `total.menutype_cnt` | 7 | 0.000 | **0.833** |
 
-**What still fails.** Every remaining weak field is a rare class, and the pattern is consistent
-rather than scattered:
+### Where it still fails
 
-| field | support | baseline F1 | LayoutLMv3 F1 |
-|---|---|---|---|
-| `total.emoneyprice` | 2 | 0.000 | **0.400** |
-| `menu.etc` | 3 | 0.000 | **0.000** |
-| `total.total_etc` | 3 | 0.000 | **0.000** |
-| `menu.itemsubtotal` | 6 | 0.000 | **0.000** |
-| `menu.discountprice` | 10 | 0.000 | **0.571** |
+Every remaining weak field is a rare class, and the pattern is consistent rather than scattered.
 
-None has more than ten test examples, and three have three or fewer. Two of them (`menu.etc`,
-`total.total_etc`) are catch-all categories, so scarcity compounds with genuine semantic ambiguity
-about what belongs in them. The honest reading is that the model has learned the frequent
-structure of a receipt well and has not seen enough of the long tail - which is a data problem,
-not an architecture problem, and would be addressed with more examples of those classes rather
-than a different model.
+| Field | Support | F1 |
+|:---|---:|---:|
+| `total.emoneyprice` | 2 | 0.400 |
+| `menu.etc` | 3 | 0.000 |
+| `total.total_etc` | 3 | 0.000 |
+| `menu.itemsubtotal` | 6 | 0.000 |
+| `menu.discountprice` | 10 | 0.571 |
 
-### Semantic retrieval: a null result
+None has more than ten test examples. Two are catch-all `etc` categories, where scarcity compounds
+with genuine ambiguity about what belongs in them. This is a data-coverage limitation, not an
+architectural one.
 
-PostgreSQL with pgvector indexes the 100-document corpus, and
-`GET /documents/{id}/similar` returns nearest neighbours by cosine distance, excluding the
-query document itself. Qualitatively it works: the nearest neighbour of `cord-test-0000` is
-`cord-test-0092`, the same vendor and the same `901016 TICKET CP` product code at a different
-quantity.
-
-Quantitatively it does not earn its place, and that is worth stating rather than hiding.
-Near-duplicates were planted by shuffling token blocks and perturbing amounts, then both methods
-were asked to retrieve each query's twin:
-
-| method | Recall@5 |
-|---|---|
-| TF-IDF lexical baseline | 1.000 |
-| BGE-small embeddings | 1.000 |
-
-Both are perfect, so **this experiment provides no evidence that semantic retrieval beats lexical
-matching here.** The benchmark is saturated: 100 documents is a small index, and
-duplicates built by reordering tokens stay lexically close, which is exactly the case TF-IDF is
-good at.
-
-Making this a real test would need a larger index with distractor documents, and duplicates that
-are genuinely paraphrased rather than reordered - different wording for the same transaction,
-which is where lexical overlap breaks down and embeddings should pull ahead. Until that is run,
-the defensible claim is that retrieval is implemented and works, not that it was necessary.
+---
 
 ## What is measured, and what is not
 
-Being specific about this is the point of the repository.
-
 | Component | Status |
-|---|---|
-| LayoutLMv3 extraction | **Measured.** 0.948 F1, single run, artifacts committed |
-| Rule baseline | **Measured.** 0.509 F1, deterministic |
-| Per-field analysis | **Measured.** Gain located in fields rules cannot reach |
-| Entity-level metric | **Tested.** Implemented here, 22 tests |
-| Decimal validation | **Tested.** Reconciliation logic covered |
-| LangGraph routing | **Verified.** Both branches exercised |
-| FastAPI + Docker | **CI-verified.** Builds and serves without a GPU |
-| pgvector retrieval | **Implemented, not justified.** Lexical baseline ties at Recall@5 = 1.0 |
-| Review-priority model | **Implemented.** Calibrated classifier with frozen threshold |
-| MLflow | **Used.** Training runs tracked |
+|:---|:---|
+| LayoutLMv3 extraction | **Measured** - 0.948 F1, single run |
+| Rule baseline | **Measured** - 0.509 F1, deterministic |
+| Per-field analysis | **Measured** - gain located in position-dependent fields |
+| Entity-level metric | **Tested** - implemented here, covered by tests |
+| Decimal validation | **Tested** - reconciliation logic covered |
+| LangGraph routing | **Verified** - both branches exercised |
+| FastAPI + Docker | **CI-verified** - builds and serves without a GPU |
+| Semantic retrieval | **Implemented, not justified** - see below |
+| Review-priority model | **Implemented, not deployed** - see below |
+| MLflow | **Used** - training runs tracked |
 
 Not measured, and therefore not claimed: latency, cost per document, KYC or compliance
 performance, confidence intervals on any figure.
 
+### Two negative results
+
+**Semantic retrieval is not justified by the evidence.** PostgreSQL with pgvector indexes the
+corpus, and `GET /documents/{id}/similar` returns nearest neighbours by cosine distance. It works
+qualitatively: the nearest neighbour of `cord-test-0000` is the same vendor and product code at a
+different quantity. But against a TF-IDF baseline on planted near-duplicates, both scored
+**Recall@5 = 1.000**. The benchmark is saturated. 100 documents is a small index, and duplicates
+built by reordering tokens stay lexically close, which is the case TF-IDF handles well. A real
+test needs a larger index with distractors and genuinely paraphrased duplicates.
+
+**Selective automation is gated on extraction quality.** The review-priority model trains on real
+labels: whether extraction fell below a usable quality bar, measured against ground truth. With
+the rule baseline, median document-level F1 is 0.545 and 84% of documents fall below the bar, so no
+confidence threshold can deliver a 5% error budget. The correct outcome is zero automation, because
+you cannot route your way out of a weak extractor. Since the model failed its acceptance criterion
+it is **not deployed**: the deterministic triage runs instead, and the service reports which path
+is active.
+
+---
+
+## Architecture
+
+```
+                        Input document
+                              |
+                              v
+                     +------------------+
+                     |    Extraction    |  LayoutLMv3 (GPU service)
+                     |                  |  rules baseline | stub
+                     +--------+---------+
+                              v
+                      Structured JSON        Pydantic schema
+                              |
+                              v
+                     +------------------+
+                     |   Validation     |  Decimal arithmetic
+                     |                  |  line items -> subtotal -> total
+                     +--------+---------+
+                              v
+                         confidence?
+                    +---------+---------+
+                  low                  high
+                    |                    |
+                    v                    v
+              human review        review priority     scikit-learn
+                    |                    |
+                    +---------+----------+
+                              v
+                     +------------------+
+                     | FastAPI (CPU)    |
+                     +---+----------+---+
+                         |          |
+                         v          v
+                  PostgreSQL    GPU inference
+                   + pgvector    (separate service)
+
+     MLflow tracks training runs.
+     LangGraph orchestrates the flow above, including the branch.
+```
+
+**The CPU container is the deployable unit.** Extraction is the only stage needing a GPU, so it
+sits behind an HTTP interface selected by `MODEL_BACKEND` (`stub`, `remote`, `local`). The service
+starts, serves and passes CI with no GPU attached.
+
+---
+
 ## Design decisions
 
+**All monetary arithmetic happens in Python, never in a model.** Language models produce plausible
+numbers rather than correct ones, and the failure is silent: a wrong total looks exactly like a
+right one. Computation lives in [`src/tools.py`](src/tools.py) using `Decimal`, so that error class
+is gone by construction rather than by prompting. `Decimal` specifically because `0.1 + 0.2` does
+not equal `0.3` in binary floating point, and a cent of drift decides whether a receipt reconciles.
 
+**The routing decision derives from structured findings, never from generated text.** Checks emit
+`Finding` objects, and the decision is a function of those objects. A model cannot introduce an
+unsupported claim into the decision path.
 
-**All monetary arithmetic happens in Python, never in a model.** Language models produce
+**Extraction reports three outcomes per field: correct, incorrect, abstained.** Abstaining is safe;
+inventing a value is not. A metric that scores them identically measures the wrong thing.
 
-plausible numbers rather than correct ones, and the failure is silent - a wrong total looks
+**A model that fails its acceptance criterion is not deployed.** The review scorer only goes live
+if its threshold satisfied the configured error budget during training. Otherwise the service falls
+back to deterministic triage, which makes no error-budget claim.
 
-exactly like a right one. Computation lives in `src/tools.py` using `Decimal`, so that error
+**LangGraph is used for explicit state transitions, not to run an agent.** No model chooses what
+happens next. What earns the graph is the conditional edge: documents below the confidence floor
+skip priority scoring entirely and route straight to a human.
 
-class is gone by construction rather than by prompting.
+---
 
-
-
-**The routing decision is computed from structured findings, never from generated text.**
-
-Checks emit `Finding` objects; the decision is a function of those objects. A model cannot
-
-introduce an unsupported claim into the decision path.
-
-
-
-**Extraction reports three outcomes per field: correct, incorrect, abstained.** Abstaining is
-
-safe; inventing a value is not. A metric that scores them identically measures the wrong thing.
-
-
-
-## Setup
-
-
+## Getting started
 
 ```bash
-
 pip install -r requirements.txt
-
-cp .env.example .env        # add your database URL
-
+cp .env.example .env          # add your PostgreSQL connection string
 pytest tests/ -q
-
+python smoke_test.py          # end-to-end check
+uvicorn src.api:app --reload  # docs at http://localhost:8000/docs
 ```
 
-
-
-Training (GPU):
-
-
+Reproduce the measured results:
 
 ```bash
-
-pip install -r requirements-train.txt
-
-python -m src.train_extractor --epochs 8
-
+python eval_baseline.py                       # rule baseline   -> 0.509 F1
+python -m src.train_extractor --epochs 8      # fine-tune (GPU) -> 0.948 F1
+python index_corpus.py && python eval_retrieval.py
+python train_review.py
 ```
 
+The GPU steps also run from [`notebooks/run_colab.ipynb`](notebooks/run_colab.ipynb).
 
+### Endpoints
+
+| Endpoint | Purpose |
+|:---|:---|
+| `POST /extract` | Document in, structured fields out |
+| `POST /analyze` | Full pipeline: extract, validate, route |
+| `GET /documents/{id}/similar` | Semantic retrieval over the indexed corpus |
+| `GET /metrics` | Measured results, or a clear statement that none exist |
+| `GET /health` | Status and active model backend |
+
+---
+
+## Project layout
+
+```
+src/
+  schemas.py          Pydantic contract shared across the pipeline
+  data.py             CORD-v2 loader and BIO label construction
+  parse.py            Chunking with page and bounding-box provenance
+  extract.py          Extraction backends behind one interface
+  baseline.py         Keyword and position rules, no model
+  train_extractor.py  LayoutLMv3 fine-tune, MLflow tracked
+  metrics.py          Entity-level scoring
+  tools.py            Deterministic financial arithmetic (Decimal)
+  checks.py           Validation, emits structured findings
+  risk.py             Review-priority scoring and routing
+  graph.py            LangGraph state machine
+  index.py            Embeddings and pgvector retrieval
+  api.py              FastAPI service
+artifacts/            Measured results, committed as evidence
+tests/                Test suite
+```
+
+---
 
 ## Limitations
 
+- **CORD-v2 is a receipt dataset**, not a KYC or onboarding corpus. This measures document
+  extraction, not regulatory performance.
+- **Single training run.** No repeated seeds, no confidence intervals. With 100 test documents the
+  interval around 0.948 is not tight, and a rerun would move the third decimal.
+- **GPU inference is evaluated separately** from the CPU API service.
+- **Retrieval is semantic search, not RAG.** Nothing retrieved is injected into a generation step.
+- **Indonesian number formatting.** Amounts use `.` as a thousands separator, so `12.000` is twelve
+  thousand. Parsing assumes this convention.
 
+Comparable published work (`nielsr/layoutlmv3-finetuned-cord`) reports 0.964 F1 under a different
+evaluation setup, which is context rather than a like-for-like comparison.
 
-- CORD-v2 is a receipt dataset, not a KYC or onboarding dataset. Evaluation measures document
+---
 
-  extraction, not regulatory compliance.
+## Dataset and licensing
 
-- Results come from a limited number of training runs; no confidence intervals, no seed sweep.
-
-- GPU inference is evaluated separately from the CPU API service.
-
-- Semantic retrieval is evaluated as document similarity, not retrieval-augmented generation.
-
-
-
-## Dataset
-
-
-
-CORD-v2 (`naver-clova-ix/cord-v2`), CC-BY-4.0.
-
+Training data: [CORD-v2](https://huggingface.co/datasets/naver-clova-ix/cord-v2), CC-BY-4.0.
+Base model: `microsoft/layoutlmv3-base`, CC-BY-NC-4.0, so the fine-tuned model inherits the
+non-commercial term.
