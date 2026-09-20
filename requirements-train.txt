@@ -1,0 +1,9 @@
+# GPU training only (Colab). Installed on top of requirements.txt
+-r requirements.txt
+torch
+transformers>=4.40
+datasets>=2.18
+seqeval
+Pillow
+accelerate
+sentence-transformers
