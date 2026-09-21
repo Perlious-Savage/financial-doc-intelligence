@@ -74,6 +74,8 @@ changing only the epoch count:
 +0.022 from doubling epochs, against 0.002 across the top three learning rates. One seed
 per configuration, so differences below roughly 0.005 are not meaningful.
 
+![MLflow runs](docs/mlflow-runs.png)
+
 Raw results in [`artifacts/sweep_results.json`](artifacts/sweep_results.json). The tracked runs
 are committed in `mlflow.db` and can be inspected directly:
 
