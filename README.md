@@ -74,8 +74,15 @@ changing only the epoch count:
 +0.022 from doubling epochs, against 0.002 across the top three learning rates. One seed
 per configuration, so differences below roughly 0.005 are not meaningful.
 
-Raw results in [`artifacts/sweep_results.json`](artifacts/sweep_results.json); runs are in
-`mlruns/` and viewable with `mlflow ui`.
+Raw results in [`artifacts/sweep_results.json`](artifacts/sweep_results.json). The tracked runs
+are committed in `mlflow.db` and can be inspected directly:
+
+```bash
+mlflow ui --backend-store-uri sqlite:///mlflow.db
+```
+
+Six runs are stored. The four above, plus two single-epoch runs on a 40-document subset that were
+smoke tests for the sweep harness - their low scores are expected and are not results.
 
 ### Where the gain came from
 

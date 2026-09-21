@@ -1,5 +1,9 @@
 """Hyperparameter sweep, tracked in MLflow.
 
+Tracking is stored in `mlflow.db` (SQLite). Inspect it with
+`mlflow ui --backend-store-uri sqlite:///mlflow.db` - without that flag MLflow looks
+for an `mlruns/` directory instead and shows an empty UI.
+
 A single training run tells you what one configuration scored. It does not tell you
 whether that configuration mattered, which is the question MLflow exists to answer.
 This sweep trains a small grid and reports sensitivity: how much the result actually
