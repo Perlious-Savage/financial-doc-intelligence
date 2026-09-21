@@ -41,6 +41,42 @@ Plateaus from epoch 6, so the final two epochs added nothing.
 
 </details>
 
+### Hyperparameter sweep
+
+Four learning rates at 4 epochs each, tracked in MLflow. The aggregate spread is the
+misleading number, so it is worth reading the rows rather than the summary.
+
+| lr | epochs | F1 | precision | recall |
+|---:|---:|---:|---:|---:|
+| 3e-05 | 4 | **0.9280** | 0.920 | 0.936 |
+| 5e-05 | 4 | **0.9263** | 0.917 | 0.936 |
+| 1e-04 | 4 | **0.9260** | 0.915 | 0.937 |
+| 1e-05 | 4 | **0.8127** | 0.797 | 0.829 |
+
+Learning rate appears to move F1 by **0.115**, but the entire spread comes from one
+configuration. The top three sit within **0.002** of each other, which is at or below
+seed noise for a single-seed run, so the fine-tune is effectively insensitive to learning
+rate across that band.
+
+And `1e-05` is not a worse learning rate, it is **undertrained**. Its evaluation loss was
+still descending steeply when training stopped (1.562, 1.037, 0.823, 0.744, no plateau),
+so at 4 epochs it had simply not converged.
+
+The controlled comparison is more useful. Holding learning rate and batch size fixed and
+changing only the epoch count:
+
+| config | F1 |
+|:---|---:|
+| lr 5e-05, 4 epochs | 0.9263 |
+| lr 5e-05, 8 epochs (reference run) | **0.9484** |
+
+**Training budget moves the result more than learning rate does within a sensible band:**
++0.022 from doubling epochs, against 0.002 across the top three learning rates. One seed
+per configuration, so differences below roughly 0.005 are not meaningful.
+
+Raw results in [`artifacts/sweep_results.json`](artifacts/sweep_results.json); runs are in
+`mlruns/` and viewable with `mlflow ui`.
+
 ### Where the gain came from
 
 The aggregate jump is not spread evenly. The rule baseline handles fields printed beside their own
@@ -86,7 +122,7 @@ architectural one.
 | FastAPI + Docker | **CI-verified** - builds and serves without a GPU |
 | Semantic retrieval | **Implemented, not justified** - see below |
 | Review-priority model | **Implemented, not deployed** - see below |
-| MLflow | **Used** - training runs tracked |
+| MLflow | **Used** - 4-configuration sweep, sensitivity analysis |
 
 Not measured, and therefore not claimed: latency, cost per document, KYC or compliance
 performance, confidence intervals on any figure.

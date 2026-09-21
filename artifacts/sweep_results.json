@@ -1,0 +1,25 @@
+{
+  "n_configurations": 4,
+  "grid": {"lr": [1e-05, 3e-05, 5e-05, 0.0001], "epochs": [4.0], "batch_size": [4]},
+  "results": [
+    {"lr": 3e-05, "epochs": 4.0, "batch_size": 4, "run_name": "lr3e-05-ep4-bs4",
+     "test_f1": 0.9280, "test_precision": 0.920, "test_recall": 0.936, "minutes": 6.9},
+    {"lr": 5e-05, "epochs": 4.0, "batch_size": 4, "run_name": "lr5e-05-ep4-bs4",
+     "test_f1": 0.9263, "test_precision": 0.917, "test_recall": 0.936, "minutes": 7.0},
+    {"lr": 0.0001, "epochs": 4.0, "batch_size": 4, "run_name": "lr0.0001-ep4-bs4",
+     "test_f1": 0.9260, "test_precision": 0.915, "test_recall": 0.937, "minutes": 7.0},
+    {"lr": 1e-05, "epochs": 4.0, "batch_size": 4, "run_name": "lr1e-05-ep4-bs4",
+     "test_f1": 0.8127, "test_precision": 0.797, "test_recall": 0.829, "minutes": 7.9}
+  ],
+  "best": {"run_name": "lr3e-05-ep4-bs4", "test_f1": 0.9280},
+  "spread_across_grid": 0.1153,
+  "spread_excluding_undertrained": 0.0020,
+  "interpretation": {
+    "headline_spread_is_misleading": "The 0.1153 spread is produced entirely by lr=1e-05. The other three configurations fall within 0.0020 of each other, which is at or below seed noise for a single-seed run.",
+    "lr_1e-05_is_undertrained_not_worse": "Its evaluation loss was still descending steeply at the end of training (1.562 -> 1.037 -> 0.823 -> 0.744, no plateau). At 4 epochs it had not converged; the learning rate is not inherently inferior.",
+    "controlled_epoch_comparison": "lr=5e-05 at 4 epochs scores 0.9263; the reference run at lr=5e-05, 8 epochs scores 0.9484. Identical except for epoch count.",
+    "conclusion": "Within a sensible learning-rate band, training budget moves the result more than learning rate does: +0.0221 from doubling epochs versus 0.0020 across the top three learning rates."
+  },
+  "caveats": "One seed per configuration. Differences below roughly 0.005 should not be read as real.",
+  "hardware": "A100, ~7 minutes per 4-epoch run"
+}
